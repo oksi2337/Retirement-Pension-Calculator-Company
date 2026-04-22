@@ -729,10 +729,15 @@
             const deductionNote = prevPaid > 0
                 ? `<div style="color:#fca5a5;">· 기 지급 부담금 차감 적용</div>` : '';
 
+            const firstNote = (p.startDate && p.endDate && p.firstBase > 0)
+                ? `<div>· 첫 달: ${startTotal}일 중 <b style="color:#e2e8f0;">${startWorked}일</b> 일할 → <b style="color:#e2e8f0;">${Math.round(proratedFirst).toLocaleString()}원</b></div>` : '';
+            const lastNote = (p.startDate && p.endDate && p.lastBase > 0)
+                ? `<div>· 마지막 달: ${endTotal}일 중 <b style="color:#e2e8f0;">${endWorked}일</b> 일할 → <b style="color:#e2e8f0;">${Math.round(proratedLast).toLocaleString()}원</b></div>` : '';
+
             const explanation = (p.startDate && p.endDate)
                 ? `<div>· 중간 기간 급여: 전액 반영</div>
-                   <div>· 첫 달: ${startTotal}일 중 <b style="color:#e2e8f0;">${startWorked}일</b> 일할 계산</div>
-                   <div>· 마지막 달: ${endTotal}일 중 <b style="color:#e2e8f0;">${endWorked}일</b> 일할 계산</div>
+                   ${firstNote}
+                   ${lastNote}
                    <div>· 과세별도: 일회성 <b style="color:#e2e8f0;">${excludedCount}건</b> 제외 후 합산</div>
                    <div>· 임금총액 ÷ 12 = 예상 퇴직급여</div>
                    ${deductionNote}`
