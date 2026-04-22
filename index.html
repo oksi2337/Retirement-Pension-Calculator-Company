@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>퇴직연금 DC형 부담금 계산기</title>
+    <title>퇴직연금 DC형 납입액 계산기</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
@@ -294,7 +294,7 @@
     <div class="app-header">
         <div class="max-w-7xl mx-auto flex items-center justify-between">
             <div>
-                <h1 class="text-xl font-bold tracking-tight">퇴직연금 DC형 부담금 계산기</h1>
+                <h1 class="text-xl font-bold tracking-tight">퇴직연금 DC형 납입액 계산기</h1>
                 <p class="text-xs text-blue-200 mt-0.5">개인별과세소득액내역 기반 산출</p>
             </div>
         </div>
@@ -470,7 +470,7 @@
                         <span class="employee-index-badge">${idx + 1}</span>
                         <div>
                             <span class="text-base font-bold text-gray-800">직원 ${idx + 1}</span>
-                            <span class="text-xs text-gray-400 ml-2">부담금 산출 정보 입력</span>
+                            <span class="text-xs text-gray-400 ml-2">납입액 산출 정보 입력</span>
                         </div>
                     </div>
                     ${canDelete ? `<button onclick="removePerson(${idx})" class="btn-danger">삭제</button>` : ''}
@@ -591,13 +591,13 @@
                             </div>
                         </div>
 
-                        <!-- 4. 기지급 부담금 -->
+                        <!-- 4. 기지급 납입액 -->
                         <div class="section-card">
                             <div class="section-header">
                                 <div class="flex items-center justify-between">
                                     <div class="flex items-center">
                                         <span class="section-number">4</span>
-                                        <span class="text-sm font-bold text-gray-700">기 지급 부담금 차감</span>
+                                        <span class="text-sm font-bold text-gray-700">기 지급 납입액 차감</span>
                                     </div>
                                     <button type="button" onclick="togglePrevPaid(${idx})" id="prevPaidToggle-${idx}" class="btn-secondary">입력</button>
                                 </div>
@@ -653,7 +653,7 @@
                             <div id="resPrevPaidRow-${idx}" class="hidden">
                                 <div class="result-box" style="background:rgba(239,68,68,0.08); border-color:rgba(239,68,68,0.2);">
                                     <div class="flex justify-between items-center">
-                                        <span class="result-label">기 지급 부담금 차감</span>
+                                        <span class="result-label">기 지급 납입액 차감</span>
                                         <span style="font-size:13px; font-weight:600; color:#fca5a5;" id="resPrevPaid-${idx}">-0원</span>
                                     </div>
                                 </div>
@@ -745,7 +745,7 @@
             lines.push(`<div>· 과세별도: 일회성 <b style="color:#e2e8f0;">${excludedCount}건</b> 제외 후 합산</div>`);
             lines.push(`<div>· 임금총액 ÷ 12 = 예상 퇴직연금 납입액</div>`);
             if (prevPaid > 0) {
-                lines.push(`<div style="color:#fca5a5;">· 기 지급 부담금 차감 적용</div>`);
+                lines.push(`<div style="color:#fca5a5;">· 기 지급 납입액 차감 적용</div>`);
             }
             const explanation = lines.join('');
 
