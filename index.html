@@ -127,7 +127,7 @@
         }
 
         function addExtraPay(idx) {
-            persons[idx].extraPays.push({ label: '', amount: 0, excluded: false });
+            persons[idx].extraPays.push({ label: '', amount: 0, included: false });
             renderExtraPays(idx);
             calculatePerson(idx);
         }
@@ -164,8 +164,8 @@
                             class="w-full bg-transparent border-none text-sm font-medium text-blue-600 text-right focus:ring-0 p-0" placeholder="0">
                     </div>
                     <div class="col-span-3 text-center flex items-center justify-center">
-                        <input type="checkbox" ${item.excluded ? 'checked' : ''}
-                            onchange="updateExtra(${idx}, ${ei}, 'excluded', this.checked)"
+                        <input type="checkbox" ${item.included ? 'checked' : ''}
+                            onchange="updateExtra(${idx}, ${ei}, 'included', this.checked)"
                             class="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500 cursor-pointer">
                     </div>
                     <div class="col-span-1 text-center">
@@ -299,12 +299,12 @@
                                     + 항목 추가
                                 </button>
                             </div>
-                            <p class="text-xs text-gray-500 mb-4">임금총액 산출 시 일회성 수당(명절상여, 경조금 등)은 제외합니다. (단, 연차수당, 상여금은 포함)</p>
+                            <p class="text-xs text-gray-500 mb-4">비일회성 수당(연차수당, 상여금 등)은 체크하면 급여지급액과 합산하여 임금총액에 포함됩니다. 체크하지 않은 항목(일회성 수당 등)은 제외됩니다.</p>
                             <div class="bg-gray-50 rounded-xl border border-gray-200 p-1">
                                 <div class="grid grid-cols-12 gap-2 px-4 py-2 border-b border-gray-200 text-xs font-semibold text-gray-500 text-center">
                                     <div class="col-span-4 text-left">수당명 / 메모</div>
                                     <div class="col-span-4 text-right">금액 (원)</div>
-                                    <div class="col-span-3">일회성 제외</div>
+                                    <div class="col-span-3">비일회성 포함</div>
                                     <div class="col-span-1">삭제</div>
                                 </div>
                                 <div id="extraPayContainer-${idx}" class="divide-y divide-gray-100"></div>
@@ -429,10 +429,12 @@
                 proratedLast = (p.lastBase / endTotal) * endWorked;
             }
 
-            let includedExtra = 0, excludedCount = 0;
+            let includedExtra = 0, includedCount = 0;
             p.extraPays.forEach(item => {
-                if (item.excluded) excludedCount++;
-                else includedExtra += item.amount;
+                if (item.included) {
+                    includedCount++;
+                    includedExtra += item.amount;
+                }
             });
 
             const prevPaid = p.prevPaid || 0;
@@ -449,7 +451,7 @@
             } else {
                 lines.push(`<div>· 급여지급액 총합계 기반 산출</div>`);
             }
-            lines.push(`<div>· 과세별도: 일회성 <b class="text-gray-200">${excludedCount}건</b> 제외 후 합산</div>`);
+            lines.push(`<div>· 과세별도: 비일회성 <b class="text-gray-200">${includedCount}건</b> 급여지급액과 합산</div>`);
             lines.push(`<div>· 임금총액 ÷ 12 = 예상 퇴직연금 납입액</div>`);
             if (prevPaid > 0) {
                 lines.push(`<div class="text-yellow-400">· 기 지급 납입액 차감 적용</div>`);
