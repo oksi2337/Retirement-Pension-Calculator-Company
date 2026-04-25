@@ -5,7 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>퇴직연금 DC형 납입액 계산기</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <!-- xlsx-js-style: SheetJS 무료 fork, 셀 스타일링 완전 지원 -->
+    <script src="https://unpkg.com/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Pretendard:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
         body { font-family: 'Pretendard', sans-serif; background-color: #f8f9fa; }
@@ -593,37 +594,132 @@
             document.getElementById('summaryTotal').innerText = total.toLocaleString();
         }
 
+        // ═══════════════════════════════════════════════════════════════
+        // 엑셀 추출 (retirement-pension-excel-skill v1.0 정의 준수)
+        // ───────────────────────────────────────────────────────────────
+        // - 시트 구성: 요약 + 상세 내역
+        // - 합계: =SUM() 수식 사용 (하드코딩 금지)
+        // - 금액 포맷: #,##0"원" / 0은 "-"로 표시
+        // - 폰트: 맑은 고딕
+        // - 헤더 색: #1F4E78 / 합계 강조: #FFF2CC / 블록: #D9E1F2
+        // ═══════════════════════════════════════════════════════════════
         function exportToExcel() {
-            const wb = XLSX.utils.book_new();
-            const today = new Date().toLocaleDateString('ko-KR');
-            const dateStr = new Date().toISOString().slice(0, 10);
+            // ── 스타일 프리셋 (Skill Style Rules) ─────────────────────
+            const FONT      = { name: '맑은 고딕', sz: 11 };
+            const FONT_BOLD = { name: '맑은 고딕', sz: 11, bold: true };
+            const FONT_HEAD = { name: '맑은 고딕', sz: 12, bold: true, color: { rgb: 'FFFFFF' } };
+            const FONT_FINAL= { name: '맑은 고딕', sz: 11, bold: true, color: { rgb: 'C00000' } };
+            const FONT_BLK  = { name: '맑은 고딕', sz: 12, bold: true };
 
-            // ── Sheet 1: 요약 ──────────────────────────────────────────────
-            const s1 = [
-                ['퇴직연금 DC형 납입액 산출 내역'],
-                [`산출일: ${today}`],
-                [],
-                ['No.', '성명', '사번', '임금총액 (원)', '예상 납입액 (÷12, 원)', '기지급 차감 (원)', '최종 납입액 (원)'],
-            ];
-            let grandTotal = 0;
+            const FILL_HEAD   = { patternType: 'solid', fgColor: { rgb: '1F4E78' } };
+            const FILL_TOTAL  = { patternType: 'solid', fgColor: { rgb: 'FFF2CC' } };
+            const FILL_BLOCK  = { patternType: 'solid', fgColor: { rgb: 'D9E1F2' } };
+            const FILL_SUB    = { patternType: 'solid', fgColor: { rgb: 'F2F2F2' } };
+
+            const BORDER_THIN = {
+                top:    { style: 'thin', color: { rgb: 'BFBFBF' } },
+                bottom: { style: 'thin', color: { rgb: 'BFBFBF' } },
+                left:   { style: 'thin', color: { rgb: 'BFBFBF' } },
+                right:  { style: 'thin', color: { rgb: 'BFBFBF' } },
+            };
+            const BORDER_TOTAL = {
+                top:    { style: 'medium', color: { rgb: '000000' } },
+                bottom: { style: 'medium', color: { rgb: '000000' } },
+                left:   { style: 'thin',   color: { rgb: 'BFBFBF' } },
+                right:  { style: 'thin',   color: { rgb: 'BFBFBF' } },
+            };
+
+            const ALIGN_C = { horizontal: 'center', vertical: 'center' };
+            const ALIGN_L = { horizontal: 'left',   vertical: 'center' };
+            const ALIGN_R = { horizontal: 'right',  vertical: 'center' };
+
+            const MONEY_FMT = '#,##0"원";[Red]-#,##0"원";"-"';
+
+            // ── 셀 빌더 헬퍼 ──────────────────────────────────────────
+            const cell = (v, opts = {}) => {
+                const c = { v };
+                if (typeof v === 'number') c.t = 'n';
+                else if (typeof v === 'string' && v.startsWith('=')) { c.t = 'n'; c.f = v.slice(1); delete c.v; }
+                else c.t = 's';
+                c.s = {
+                    font: opts.font || FONT,
+                    alignment: opts.align || ALIGN_L,
+                    border: opts.border || BORDER_THIN,
+                    ...(opts.fill   ? { fill: opts.fill }     : {}),
+                    ...(opts.fmt    ? { numFmt: opts.fmt }    : {}),
+                };
+                return c;
+            };
+            const setCell = (ws, addr, c) => { ws[addr] = c; };
+            const colLetter = (n) => XLSX.utils.encode_col(n);
+
+            const wb = XLSX.utils.book_new();
+            const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+
+            // ╔═══════════════════════════════════════════════════════╗
+            // ║ Sheet 1: 요약                                          ║
+            // ╚═══════════════════════════════════════════════════════╝
+            const ws1 = {};
+            const headers = ['No', '성명', '사번', '임금총액', '예상 납입액', '기지급 차감', '최종 납입액'];
+
+            // 헤더 행 (1행)
+            headers.forEach((h, i) => {
+                setCell(ws1, `${colLetter(i)}1`, cell(h, {
+                    font: FONT_HEAD, fill: FILL_HEAD, align: ALIGN_C, border: BORDER_THIN
+                }));
+            });
+
+            // 데이터 행 (2행~)
             persons.forEach((p, i) => {
+                const r = i + 2;
                 const gross = Math.round((p.totalWage || 0) / 12);
                 const prev  = p.prevPaid || 0;
                 const net   = p.severance || 0;
-                grandTotal += net;
-                s1.push([i + 1, p.empName || '', p.empId || '', p.totalWage || 0, gross, prev || 0, net]);
-            });
-            s1.push([], ['', '', '합 계', '', '', '', grandTotal]);
 
-            const ws1 = XLSX.utils.aoa_to_sheet(s1);
-            ws1['!cols'] = [{wch:4},{wch:10},{wch:10},{wch:18},{wch:20},{wch:16},{wch:18}];
+                setCell(ws1, `A${r}`, cell(i + 1,                   { align: ALIGN_C }));
+                setCell(ws1, `B${r}`, cell(p.empName || '',         { align: ALIGN_C }));
+                setCell(ws1, `C${r}`, cell(p.empId || '',           { align: ALIGN_C }));
+                setCell(ws1, `D${r}`, cell(p.totalWage || 0,        { align: ALIGN_R, fmt: MONEY_FMT }));
+                setCell(ws1, `E${r}`, cell(gross,                   { align: ALIGN_R, fmt: MONEY_FMT }));
+                setCell(ws1, `F${r}`, cell(prev,                    { align: ALIGN_R, fmt: MONEY_FMT }));
+                setCell(ws1, `G${r}`, cell(net,                     { font: FONT_FINAL, align: ALIGN_R, fmt: MONEY_FMT }));
+            });
+
+            // 합계 행 (=SUM 수식)
+            const totalRow = persons.length + 2;
+            const lastDataRow = persons.length + 1;
+            setCell(ws1, `A${totalRow}`, cell('합계', { font: FONT_BOLD, fill: FILL_TOTAL, align: ALIGN_C, border: BORDER_TOTAL }));
+            setCell(ws1, `B${totalRow}`, cell('',     { font: FONT_BOLD, fill: FILL_TOTAL, border: BORDER_TOTAL }));
+            setCell(ws1, `C${totalRow}`, cell('',     { font: FONT_BOLD, fill: FILL_TOTAL, border: BORDER_TOTAL }));
+            ['D', 'E', 'F', 'G'].forEach(col => {
+                setCell(ws1, `${col}${totalRow}`, cell(`=SUM(${col}2:${col}${lastDataRow})`, {
+                    font: FONT_BOLD, fill: FILL_TOTAL, align: ALIGN_R, fmt: MONEY_FMT, border: BORDER_TOTAL
+                }));
+            });
+
+            // 셀 병합: A~C 합계 라벨
+            ws1['!merges'] = [{ s: { r: totalRow - 1, c: 0 }, e: { r: totalRow - 1, c: 2 } }];
+
+            // 시트 범위 / 컬럼 너비 / 행 높이
+            ws1['!ref']  = `A1:G${totalRow}`;
+            ws1['!cols'] = [{wch:6},{wch:12},{wch:18},{wch:18},{wch:18},{wch:18},{wch:20}];
+            ws1['!rows'] = [{ hpt: 28 }];
+
             XLSX.utils.book_append_sheet(wb, ws1, '요약');
 
-            // ── Sheet 2: 상세 내역 ─────────────────────────────────────────
-            const s2 = [
-                ['퇴직연금 DC형 납입액 산출 상세 내역'],
-                [`산출일: ${today}`],
-            ];
+            // ╔═══════════════════════════════════════════════════════╗
+            // ║ Sheet 2: 상세 내역                                     ║
+            // ╚═══════════════════════════════════════════════════════╝
+            const ws2 = {};
+            let row = 1; // 1-based
+
+            const writeRow = (cells) => {
+                cells.forEach((c, i) => {
+                    if (c) setCell(ws2, `${colLetter(i)}${row}`, c);
+                });
+                row++;
+            };
+            const blankRow = () => { row++; };
 
             persons.forEach((p, i) => {
                 const firstMode = p.firstMode || 'prorated';
@@ -646,70 +742,172 @@
                 const prev  = p.prevPaid || 0;
                 const net   = p.severance || 0;
 
-                s2.push([]);
-                s2.push([`▣ 직원 ${i+1}: ${p.empName || '(미입력)'}`, `사번: ${p.empId || '-'}`, '']);
-                s2.push(['항목', '내용', '금액 (원)']);
-                s2.push(['입사일', p.startDate || '-', '']);
-                s2.push(['퇴직일/기산일자', p.endDate || '-', '']);
+                // ── 블록 헤더 ──
+                const blockTitle = `No.${i + 1} — ${p.empName || '(미입력)'} (${p.empId || '-'})`;
+                setCell(ws2, `A${row}`, cell(blockTitle, { font: FONT_BLK, fill: FILL_BLOCK, align: ALIGN_L }));
+                setCell(ws2, `B${row}`, cell('', { fill: FILL_BLOCK }));
+                setCell(ws2, `C${row}`, cell('', { fill: FILL_BLOCK }));
+                setCell(ws2, `D${row}`, cell('', { fill: FILL_BLOCK }));
+                if (!ws2['!merges']) ws2['!merges'] = [];
+                ws2['!merges'].push({ s: { r: row - 1, c: 0 }, e: { r: row - 1, c: 3 } });
+                row++;
 
-                // 임금총액 산출내역
-                s2.push([]);
-                s2.push(['【 임금총액 산출내역 】', '', '']);
-                s2.push(['1년치 급여지급액 총합계', '', p.totalBase || 0]);
+                // ── 1. 기본 정보 ──
+                setCell(ws2, `A${row}`, cell('1. 기본 정보', { font: FONT_BOLD, fill: FILL_SUB, align: ALIGN_L }));
+                row++;
+                writeRow([
+                    cell('  • 입사일',                    { align: ALIGN_L }),
+                    cell(p.startDate || '-',              { align: ALIGN_L }),
+                ]);
+                writeRow([
+                    cell('  • 퇴직일/기산일자',           { align: ALIGN_L }),
+                    cell(p.endDate || '-',                { align: ALIGN_L }),
+                ]);
+                blankRow();
+
+                // ── 2. 임금총액 산출 내역 ──
+                setCell(ws2, `A${row}`, cell('2. 임금총액 산출 내역', { font: FONT_BOLD, fill: FILL_SUB, align: ALIGN_L }));
+                row++;
+
+                const sumStart = row;
+
+                writeRow([
+                    cell('  • 1년치 급여지급액 총합계',   { align: ALIGN_L }),
+                    cell(p.totalBase || 0,                { align: ALIGN_R, fmt: MONEY_FMT }),
+                ]);
 
                 if (firstMode === 'prorated') {
                     if ((p.firstBase || 0) > 0) {
-                        s2.push(['첫 달 월급여 제외', `${(p.firstBase).toLocaleString()}원 전액 제거`, -(p.firstBase)]);
-                        s2.push(['첫 달 일할 반영', `${startTotal}일 중 ${startWorked}일 근무`, Math.round(proratedFirst)]);
+                        writeRow([
+                            cell('  • 첫 달 월급여 제외',                                   { align: ALIGN_L }),
+                            cell(-(p.firstBase),                                            { align: ALIGN_R, fmt: MONEY_FMT }),
+                            cell(`${(p.firstBase).toLocaleString()}원 전액 제거`,           { align: ALIGN_L }),
+                        ]);
+                        writeRow([
+                            cell('  • 첫 달 일할 반영',                                     { align: ALIGN_L }),
+                            cell(Math.round(proratedFirst),                                 { align: ALIGN_R, fmt: MONEY_FMT }),
+                            cell(`${startTotal}일 중 ${startWorked}일 근무`,                { align: ALIGN_L }),
+                        ]);
                     }
                 } else {
                     if ((p.firstDeduction || 0) > 0) {
-                        s2.push(['첫 달 차감 (직접 입력)', '', -(p.firstDeduction)]);
+                        writeRow([
+                            cell('  • 첫 달 차감 (직접 입력)',  { align: ALIGN_L }),
+                            cell(-(p.firstDeduction),           { align: ALIGN_R, fmt: MONEY_FMT }),
+                        ]);
                     }
                 }
 
                 if (lastMode === 'prorated') {
                     if ((p.lastBase || 0) > 0) {
-                        s2.push(['마지막 달 월급여 제외', `${(p.lastBase).toLocaleString()}원 전액 제거`, -(p.lastBase)]);
-                        s2.push(['마지막 달 일할 반영', `${endTotal}일 중 ${endWorked}일 근무`, Math.round(proratedLast)]);
+                        writeRow([
+                            cell('  • 마지막 달 월급여 제외',                               { align: ALIGN_L }),
+                            cell(-(p.lastBase),                                             { align: ALIGN_R, fmt: MONEY_FMT }),
+                            cell(`${(p.lastBase).toLocaleString()}원 전액 제거`,            { align: ALIGN_L }),
+                        ]);
+                        writeRow([
+                            cell('  • 마지막 달 일할 반영',                                 { align: ALIGN_L }),
+                            cell(Math.round(proratedLast),                                  { align: ALIGN_R, fmt: MONEY_FMT }),
+                            cell(`${endTotal}일 중 ${endWorked}일 근무`,                    { align: ALIGN_L }),
+                        ]);
                     }
                 } else {
                     if ((p.lastDeduction || 0) > 0) {
-                        s2.push(['마지막 달 차감 (직접 입력)', '', -(p.lastDeduction)]);
+                        writeRow([
+                            cell('  • 마지막 달 차감 (직접 입력)', { align: ALIGN_L }),
+                            cell(-(p.lastDeduction),               { align: ALIGN_R, fmt: MONEY_FMT }),
+                        ]);
                     }
                 }
 
-                // 과세별도기지급액
-                if (p.extraPays.length > 0) {
-                    s2.push([]);
-                    s2.push(['【 과세별도기지급액 】', '', '']);
-                    p.extraPays.forEach(e => {
-                        if (e.included) {
-                            s2.push([`${e.label || '(항목명 없음)'}`, '비일회성 포함 → 합산', e.amount]);
-                        } else {
-                            s2.push([`${e.label || '(항목명 없음)'}`, '일회성 → 제외', '']);
-                        }
-                    });
-                }
+                // 비일회성 별도지급액 합계
+                const nonRecurringSum = (p.extraPays || [])
+                    .filter(e => e.included)
+                    .reduce((acc, e) => acc + (Number(e.amount) || 0), 0);
+                writeRow([
+                    cell('  • 비일회성 별도지급액',       { align: ALIGN_L }),
+                    cell(nonRecurringSum,                 { align: ALIGN_R, fmt: MONEY_FMT }),
+                ]);
 
-                // 산출 결과
-                s2.push([]);
-                s2.push(['【 산출 결과 】', '', '']);
-                s2.push(['임금총액 (A)', '', p.totalWage || 0]);
-                s2.push(['예상 퇴직연금 납입액 (A÷12)', '', gross]);
-                if (prev > 0) {
-                    s2.push(['기 지급 납입액 차감', '', -prev]);
-                    s2.push(['최종 퇴직연금 납입액', '', net]);
+                const sumEnd = row - 1;
+
+                // 임금총액 합계 (=SUM 수식)
+                const totalBorder = {
+                    top:    { style: 'medium', color: { rgb: '000000' } },
+                    bottom: { style: 'thin',   color: { rgb: 'BFBFBF' } },
+                    left:   { style: 'thin',   color: { rgb: 'BFBFBF' } },
+                    right:  { style: 'thin',   color: { rgb: 'BFBFBF' } },
+                };
+                setCell(ws2, `A${row}`, cell('  ▶ 임금총액 (A)', { font: FONT_BOLD, align: ALIGN_L, border: totalBorder }));
+                setCell(ws2, `B${row}`, cell(`=SUM(B${sumStart}:B${sumEnd})`, {
+                    font: FONT_BOLD, align: ALIGN_R, fmt: MONEY_FMT, border: totalBorder
+                }));
+                row++;
+                blankRow();
+
+                // ── 3. 과세별도기지급액 항목 ──
+                setCell(ws2, `A${row}`, cell('3. 과세별도기지급액 항목', { font: FONT_BOLD, fill: FILL_SUB, align: ALIGN_L }));
+                row++;
+
+                if (p.extraPays && p.extraPays.length > 0) {
+                    // 표 헤더
+                    const subHeaderFill = { patternType: 'solid', fgColor: { rgb: 'E7E6E6' } };
+                    setCell(ws2, `A${row}`, cell('  항목명',     { font: FONT_BOLD, fill: subHeaderFill, align: ALIGN_C }));
+                    setCell(ws2, `B${row}`, cell('금액',         { font: FONT_BOLD, fill: subHeaderFill, align: ALIGN_C }));
+                    setCell(ws2, `C${row}`, cell('구분',         { font: FONT_BOLD, fill: subHeaderFill, align: ALIGN_C }));
+                    setCell(ws2, `D${row}`, cell('포함 여부',    { font: FONT_BOLD, fill: subHeaderFill, align: ALIGN_C }));
+                    row++;
+
+                    p.extraPays.forEach(e => {
+                        writeRow([
+                            cell(`  ${e.label || '(항목명 없음)'}`, { align: ALIGN_L }),
+                            cell(Number(e.amount) || 0,             { align: ALIGN_R, fmt: MONEY_FMT }),
+                            cell(e.included ? '비일회성' : '일회성', { align: ALIGN_C }),
+                            cell(e.included ? '✓ 포함' : '✗ 제외',  { align: ALIGN_C }),
+                        ]);
+                    });
                 } else {
-                    s2.push(['최종 퇴직연금 납입액', '', net]);
+                    setCell(ws2, `A${row}`, cell('  해당 없음', { align: ALIGN_L }));
+                    row++;
                 }
+                blankRow();
+
+                // ── 4. 산출 결과 ──
+                setCell(ws2, `A${row}`, cell('4. 산출 결과', { font: FONT_BOLD, fill: FILL_SUB, align: ALIGN_L }));
+                row++;
+
+                writeRow([
+                    cell('  • 예상 납입액 (A÷12)',       { align: ALIGN_L }),
+                    cell(gross,                          { align: ALIGN_R, fmt: MONEY_FMT }),
+                ]);
+                writeRow([
+                    cell('  • 기지급 차감',              { align: ALIGN_L }),
+                    cell(-prev,                          { align: ALIGN_R, fmt: MONEY_FMT }),
+                ]);
+
+                // 최종 납입액 (강조)
+                const finalBorder = {
+                    top:    { style: 'medium', color: { rgb: '000000' } },
+                    bottom: { style: 'medium', color: { rgb: '000000' } },
+                    left:   { style: 'thin',   color: { rgb: 'BFBFBF' } },
+                    right:  { style: 'thin',   color: { rgb: 'BFBFBF' } },
+                };
+                setCell(ws2, `A${row}`, cell('  ▶ 최종 납입액', { font: FONT_FINAL, fill: FILL_TOTAL, align: ALIGN_L, border: finalBorder }));
+                setCell(ws2, `B${row}`, cell(net, { font: FONT_FINAL, fill: FILL_TOTAL, align: ALIGN_R, fmt: MONEY_FMT, border: finalBorder }));
+                row++;
+
+                // 직원 사이 빈 줄 2개
+                blankRow();
+                blankRow();
             });
 
-            const ws2 = XLSX.utils.aoa_to_sheet(s2);
-            ws2['!cols'] = [{wch:32},{wch:28},{wch:16}];
+            ws2['!ref']  = `A1:D${row}`;
+            ws2['!cols'] = [{wch:30},{wch:22},{wch:18},{wch:14}];
+
             XLSX.utils.book_append_sheet(wb, ws2, '상세 내역');
 
-            XLSX.writeFile(wb, `퇴직연금_납입액_산출_${dateStr}.xlsx`);
+            // ── 저장 (Skill 파일명 규약: 퇴직연금_DC_납입액_YYYYMMDD.xlsx) ──
+            XLSX.writeFile(wb, `퇴직연금_DC_납입액_${dateStr}.xlsx`, { bookType: 'xlsx', cellStyles: true });
         }
 
         // 초기화
