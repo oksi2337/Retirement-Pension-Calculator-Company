@@ -84,6 +84,8 @@
             return {
                 empName: '',
                 empId: '',
+                department: '',
+                separateFunding: false,
                 startDate: '',
                 endDate: '',
                 totalBase: 0,
@@ -257,6 +259,23 @@
                                     <input type="text" id="empId-${idx}" value="${p.empId}"
                                         oninput="syncField(${idx}, 'empId', this.value); calculatePerson(${idx})"
                                         class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-3 gap-4 mb-4">
+                                <div class="col-span-2">
+                                    <label class="block text-xs font-semibold text-gray-600 mb-1">소속 부서</label>
+                                    <input type="text" id="department-${idx}" value="${p.department || ''}"
+                                        oninput="syncField(${idx}, 'department', this.value); calculatePerson(${idx})"
+                                        class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none" placeholder="예: 총무팀">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-semibold text-gray-600 mb-1">인건비 재원</label>
+                                    <label class="flex items-center gap-2 h-[42px] px-3 border border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 transition">
+                                        <input type="checkbox" id="separateFunding-${idx}" ${p.separateFunding ? 'checked' : ''}
+                                            onchange="syncField(${idx}, 'separateFunding', this.checked); calculatePerson(${idx})"
+                                            class="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500">
+                                        <span class="text-sm text-gray-700">별도 재원</span>
+                                    </label>
                                 </div>
                             </div>
                             <div class="grid grid-cols-2 gap-4">
@@ -660,7 +679,7 @@
             // ║ Sheet 1: 요약                                          ║
             // ╚═══════════════════════════════════════════════════════╝
             const ws1 = {};
-            const headers = ['No', '성명', '사번', '임금총액', '예상 납입액', '기지급 차감', '최종 납입액'];
+            const headers = ['No', '성명', '사번', '부서', '임금총액', '예상 납입액', '기지급 차감', '최종 납입액', '비고'];
 
             // 헤더 행 (1행)
             headers.forEach((h, i) => {
@@ -670,19 +689,23 @@
             });
 
             // 데이터 행 (2행~)
+            const FONT_NOTE = { name: '맑은 고딕', sz: 11, bold: true, color: { rgb: 'C00000' } };
             persons.forEach((p, i) => {
                 const r = i + 2;
                 const gross = Math.round((p.totalWage || 0) / 12);
                 const prev  = p.prevPaid || 0;
                 const net   = p.severance || 0;
+                const note  = p.separateFunding ? '교비로 선 지출 후 입금 예정' : '';
 
                 setCell(ws1, `A${r}`, cell(i + 1,                   { align: ALIGN_C }));
                 setCell(ws1, `B${r}`, cell(p.empName || '',         { align: ALIGN_C }));
                 setCell(ws1, `C${r}`, cell(p.empId || '',           { align: ALIGN_C }));
-                setCell(ws1, `D${r}`, cell(p.totalWage || 0,        { align: ALIGN_R, fmt: MONEY_FMT }));
-                setCell(ws1, `E${r}`, cell(gross,                   { align: ALIGN_R, fmt: MONEY_FMT }));
-                setCell(ws1, `F${r}`, cell(prev,                    { align: ALIGN_R, fmt: MONEY_FMT }));
-                setCell(ws1, `G${r}`, cell(net,                     { font: FONT_FINAL, align: ALIGN_R, fmt: MONEY_FMT }));
+                setCell(ws1, `D${r}`, cell(p.department || '',      { align: ALIGN_C }));
+                setCell(ws1, `E${r}`, cell(p.totalWage || 0,        { align: ALIGN_R, fmt: MONEY_FMT }));
+                setCell(ws1, `F${r}`, cell(gross,                   { align: ALIGN_R, fmt: MONEY_FMT }));
+                setCell(ws1, `G${r}`, cell(prev,                    { align: ALIGN_R, fmt: MONEY_FMT }));
+                setCell(ws1, `H${r}`, cell(net,                     { font: FONT_FINAL, align: ALIGN_R, fmt: MONEY_FMT }));
+                setCell(ws1, `I${r}`, cell(note,                    { font: p.separateFunding ? FONT_NOTE : FONT, align: ALIGN_C }));
             });
 
             // 합계 행 (=SUM 수식)
@@ -691,18 +714,20 @@
             setCell(ws1, `A${totalRow}`, cell('합계', { font: FONT_BOLD, fill: FILL_TOTAL, align: ALIGN_C, border: BORDER_TOTAL }));
             setCell(ws1, `B${totalRow}`, cell('',     { font: FONT_BOLD, fill: FILL_TOTAL, border: BORDER_TOTAL }));
             setCell(ws1, `C${totalRow}`, cell('',     { font: FONT_BOLD, fill: FILL_TOTAL, border: BORDER_TOTAL }));
-            ['D', 'E', 'F', 'G'].forEach(col => {
+            setCell(ws1, `D${totalRow}`, cell('',     { font: FONT_BOLD, fill: FILL_TOTAL, border: BORDER_TOTAL }));
+            ['E', 'F', 'G', 'H'].forEach(col => {
                 setCell(ws1, `${col}${totalRow}`, cell(`=SUM(${col}2:${col}${lastDataRow})`, {
                     font: FONT_BOLD, fill: FILL_TOTAL, align: ALIGN_R, fmt: MONEY_FMT, border: BORDER_TOTAL
                 }));
             });
+            setCell(ws1, `I${totalRow}`, cell('', { font: FONT_BOLD, fill: FILL_TOTAL, border: BORDER_TOTAL }));
 
-            // 셀 병합: A~C 합계 라벨
-            ws1['!merges'] = [{ s: { r: totalRow - 1, c: 0 }, e: { r: totalRow - 1, c: 2 } }];
+            // 셀 병합: A~D 합계 라벨
+            ws1['!merges'] = [{ s: { r: totalRow - 1, c: 0 }, e: { r: totalRow - 1, c: 3 } }];
 
             // 시트 범위 / 컬럼 너비 / 행 높이
-            ws1['!ref']  = `A1:G${totalRow}`;
-            ws1['!cols'] = [{wch:6},{wch:12},{wch:18},{wch:18},{wch:18},{wch:18},{wch:20}];
+            ws1['!ref']  = `A1:I${totalRow}`;
+            ws1['!cols'] = [{wch:6},{wch:12},{wch:14},{wch:16},{wch:18},{wch:18},{wch:18},{wch:20},{wch:28}];
             ws1['!rows'] = [{ hpt: 28 }];
 
             XLSX.utils.book_append_sheet(wb, ws1, '요약');
@@ -755,6 +780,14 @@
                 // ── 1. 기본 정보 ──
                 setCell(ws2, `A${row}`, cell('1. 기본 정보', { font: FONT_BOLD, fill: FILL_SUB, align: ALIGN_L }));
                 row++;
+                writeRow([
+                    cell('  • 소속 부서',                 { align: ALIGN_L }),
+                    cell(p.department || '-',             { align: ALIGN_L }),
+                ]);
+                writeRow([
+                    cell('  • 인건비 재원',               { align: ALIGN_L }),
+                    cell(p.separateFunding ? '별도 재원 (교비로 선 지출 후 입금 예정)' : '일반 재원', { align: ALIGN_L }),
+                ]);
                 writeRow([
                     cell('  • 입사일',                    { align: ALIGN_L }),
                     cell(p.startDate || '-',              { align: ALIGN_L }),
