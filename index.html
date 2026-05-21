@@ -84,6 +84,7 @@
             return {
                 empName: '',
                 empId: '',
+                birthDate: '',
                 department: '',
                 separateFunding: false,
                 startDate: '',
@@ -278,7 +279,13 @@
                                     </label>
                                 </div>
                             </div>
-                            <div class="grid grid-cols-2 gap-4">
+                            <div class="grid grid-cols-3 gap-4">
+                                <div>
+                                    <label class="block text-xs font-semibold text-gray-600 mb-1">생년월일</label>
+                                    <input type="date" id="birthDate-${idx}" value="${p.birthDate || ''}"
+                                        onchange="syncField(${idx}, 'birthDate', this.value); calculatePerson(${idx})"
+                                        class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                                </div>
                                 <div>
                                     <label class="block text-xs font-semibold text-gray-600 mb-1">입사일</label>
                                     <input type="date" id="startDate-${idx}" value="${p.startDate}"
@@ -440,16 +447,16 @@
                                     <div class="text-4xl font-black text-white text-right tracking-tight" id="resSeverance-${idx}">0</div>
                                     <div class="text-right text-xs text-gray-600 mt-0.5">원</div>
                                 </div>
-                                <div id="resPrevPaidRow-${idx}" class="hidden pt-4 border-t border-gray-800 space-y-3">
+                                <div id="resPrevPaidRow-${idx}" class="hidden pt-4 border-t border-gray-800">
                                     <div class="flex justify-between items-center text-sm">
                                         <span class="text-gray-400">기 지급 납입액 차감</span>
                                         <span class="text-red-400 font-semibold" id="resPrevPaid-${idx}">-0원</span>
                                     </div>
-                                    <div>
-                                        <span class="text-gray-400 text-sm block mb-1">최종 퇴직연금 납입액 (차감 후)</span>
-                                        <div class="text-4xl font-black text-green-400 text-right tracking-tight" id="resNetSeverance-${idx}">0</div>
-                                        <div class="text-right text-xs text-gray-600 mt-0.5">원</div>
-                                    </div>
+                                </div>
+                                <div class="pt-4 border-t border-gray-800">
+                                    <span class="text-gray-400 text-sm block mb-1">최종 퇴직연금 납입액 <span class="text-xs text-gray-500">(10원 단위 반올림)</span></span>
+                                    <div class="text-4xl font-black text-green-400 text-right tracking-tight" id="resNetSeverance-${idx}">0</div>
+                                    <div class="text-right text-xs text-gray-600 mt-0.5">원</div>
                                 </div>
                             </div>
                             <div class="bg-gray-800 p-5 rounded-xl border border-gray-700">
@@ -558,6 +565,7 @@
             }
             lines.push(`<div>· 과세별도: 비일회성 <b class="text-gray-200">${includedCount}건</b> 급여지급액과 합산</div>`);
             lines.push(`<div>· 임금총액 ÷ 12 = 예상 퇴직연금 납입액</div>`);
+            lines.push(`<div>· 10원 단위 반올림 → 최종 퇴직연금 납입액</div>`);
             if (prevPaid > 0) {
                 lines.push(`<div class="text-yellow-400">· 기 지급 납입액 차감 적용</div>`);
             }
@@ -566,7 +574,8 @@
             const finalWage = p.totalBase - firstSubtract + firstContrib - lastSubtract + lastContrib + includedExtra;
             p.totalWage = Math.round(finalWage);
             const grossSeverance = Math.round(finalWage / 12);
-            const netSeverance = grossSeverance - prevPaid;
+            const roundedSeverance = Math.round(grossSeverance / 10) * 10;
+            const netSeverance = roundedSeverance - prevPaid;
             p.severance = netSeverance;
 
             el(`resTotalWage-${idx}`).innerText = p.totalWage.toLocaleString();
@@ -577,10 +586,10 @@
             if (prevPaid > 0) {
                 prevPaidRow.classList.remove('hidden');
                 el(`resPrevPaid-${idx}`).innerText = '-' + prevPaid.toLocaleString() + '원';
-                el(`resNetSeverance-${idx}`).innerText = netSeverance.toLocaleString();
             } else {
                 prevPaidRow.classList.add('hidden');
             }
+            el(`resNetSeverance-${idx}`).innerText = netSeverance.toLocaleString();
 
             renderSummary();
         }
@@ -679,7 +688,7 @@
             // ║ Sheet 1: 요약                                          ║
             // ╚═══════════════════════════════════════════════════════╝
             const ws1 = {};
-            const headers = ['No', '성명', '사번', '부서', '임금총액', '예상 납입액', '기지급 차감', '최종 납입액', '비고'];
+            const headers = ['No', '성명', '사번', '생년월일', '부서', '임금총액', '예상 납입액', '기지급 차감', '최종 납입액', '비고'];
 
             // 헤더 행 (1행)
             headers.forEach((h, i) => {
@@ -700,12 +709,13 @@
                 setCell(ws1, `A${r}`, cell(i + 1,                   { align: ALIGN_C }));
                 setCell(ws1, `B${r}`, cell(p.empName || '',         { align: ALIGN_C }));
                 setCell(ws1, `C${r}`, cell(p.empId || '',           { align: ALIGN_C }));
-                setCell(ws1, `D${r}`, cell(p.department || '',      { align: ALIGN_C }));
-                setCell(ws1, `E${r}`, cell(p.totalWage || 0,        { align: ALIGN_R, fmt: MONEY_FMT }));
-                setCell(ws1, `F${r}`, cell(gross,                   { align: ALIGN_R, fmt: MONEY_FMT }));
-                setCell(ws1, `G${r}`, cell(prev,                    { align: ALIGN_R, fmt: MONEY_FMT }));
-                setCell(ws1, `H${r}`, cell(net,                     { font: FONT_FINAL, align: ALIGN_R, fmt: MONEY_FMT }));
-                setCell(ws1, `I${r}`, cell(note,                    { font: p.separateFunding ? FONT_NOTE : FONT, align: ALIGN_C }));
+                setCell(ws1, `D${r}`, cell(p.birthDate || '',       { align: ALIGN_C }));
+                setCell(ws1, `E${r}`, cell(p.department || '',      { align: ALIGN_C }));
+                setCell(ws1, `F${r}`, cell(p.totalWage || 0,        { align: ALIGN_R, fmt: MONEY_FMT }));
+                setCell(ws1, `G${r}`, cell(gross,                   { align: ALIGN_R, fmt: MONEY_FMT }));
+                setCell(ws1, `H${r}`, cell(prev,                    { align: ALIGN_R, fmt: MONEY_FMT }));
+                setCell(ws1, `I${r}`, cell(net,                     { font: FONT_FINAL, align: ALIGN_R, fmt: MONEY_FMT }));
+                setCell(ws1, `J${r}`, cell(note,                    { font: p.separateFunding ? FONT_NOTE : FONT, align: ALIGN_C }));
             });
 
             // 합계 행 (=SUM 수식)
@@ -715,19 +725,20 @@
             setCell(ws1, `B${totalRow}`, cell('',     { font: FONT_BOLD, fill: FILL_TOTAL, border: BORDER_TOTAL }));
             setCell(ws1, `C${totalRow}`, cell('',     { font: FONT_BOLD, fill: FILL_TOTAL, border: BORDER_TOTAL }));
             setCell(ws1, `D${totalRow}`, cell('',     { font: FONT_BOLD, fill: FILL_TOTAL, border: BORDER_TOTAL }));
-            ['E', 'F', 'G', 'H'].forEach(col => {
+            setCell(ws1, `E${totalRow}`, cell('',     { font: FONT_BOLD, fill: FILL_TOTAL, border: BORDER_TOTAL }));
+            ['F', 'G', 'H', 'I'].forEach(col => {
                 setCell(ws1, `${col}${totalRow}`, cell(`=SUM(${col}2:${col}${lastDataRow})`, {
                     font: FONT_BOLD, fill: FILL_TOTAL, align: ALIGN_R, fmt: MONEY_FMT, border: BORDER_TOTAL
                 }));
             });
-            setCell(ws1, `I${totalRow}`, cell('', { font: FONT_BOLD, fill: FILL_TOTAL, border: BORDER_TOTAL }));
+            setCell(ws1, `J${totalRow}`, cell('', { font: FONT_BOLD, fill: FILL_TOTAL, border: BORDER_TOTAL }));
 
-            // 셀 병합: A~D 합계 라벨
-            ws1['!merges'] = [{ s: { r: totalRow - 1, c: 0 }, e: { r: totalRow - 1, c: 3 } }];
+            // 셀 병합: A~E 합계 라벨
+            ws1['!merges'] = [{ s: { r: totalRow - 1, c: 0 }, e: { r: totalRow - 1, c: 4 } }];
 
             // 시트 범위 / 컬럼 너비 / 행 높이
-            ws1['!ref']  = `A1:I${totalRow}`;
-            ws1['!cols'] = [{wch:6},{wch:12},{wch:14},{wch:16},{wch:18},{wch:18},{wch:18},{wch:20},{wch:28}];
+            ws1['!ref']  = `A1:J${totalRow}`;
+            ws1['!cols'] = [{wch:6},{wch:12},{wch:14},{wch:14},{wch:16},{wch:18},{wch:18},{wch:18},{wch:20},{wch:28}];
             ws1['!rows'] = [{ hpt: 28 }];
 
             XLSX.utils.book_append_sheet(wb, ws1, '요약');
@@ -913,6 +924,13 @@
                     cell('  • 예상 납입액 (A÷12)',       { align: ALIGN_L }),
                     cell(gross,                          { align: ALIGN_R, fmt: MONEY_FMT }),
                 ]);
+                const roundedGross = Math.round(gross / 10) * 10;
+                if (roundedGross !== gross) {
+                    writeRow([
+                        cell('  • 10원 단위 반올림 조정',  { align: ALIGN_L }),
+                        cell(roundedGross - gross,         { align: ALIGN_R, fmt: MONEY_FMT }),
+                    ]);
+                }
                 writeRow([
                     cell('  • 기지급 차감',              { align: ALIGN_L }),
                     cell(-prev,                          { align: ALIGN_R, fmt: MONEY_FMT }),
